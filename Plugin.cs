@@ -78,27 +78,31 @@ namespace Autoshield
                 corners[i] = new Vector3(sp.x, Screen.height - sp.y);
             }
 
-            // Valheim gold, slightly inset, with a soft pulse and a dark drop shadow.
-            var gold = new Color(1f, 0.78f, 0.35f, 0.75f + 0.25f * Mathf.Sin(Time.unscaledTime * 3f));
+            // Two slim gold sparks with a fading tail circle the slot, opposite each other.
             var center = (corners[0] + corners[2]) / 2f;
-            for (int i = 0; i < 4; i++) corners[i] += (center - corners[i]).normalized * 2f;
-            float offset = Time.unscaledTime * 10f, pos = 0f;
+            var lens = new float[4];
+            float perimeter = 0f;
             for (int i = 0; i < 4; i++)
             {
-                Vector3 a = corners[i], b = corners[(i + 1) % 4];
-                float len = (b - a).magnitude;
-                if (!(len > 0f && len < 500f)) return; // NaN or absurd rect: draw nothing
-                int steps = Mathf.Min((int)(len / 2f), 250); // hard cap, the loop can never run away
-                for (int s = 0; s < steps; s++, pos += 2f)
-                    if ((pos + offset) % 10f < 6f)
-                    {
-                        var pt = Vector3.Lerp(a, b, s * 2f / len);
-                        GUI.color = new Color(0f, 0f, 0f, 0.8f);
-                        GUI.DrawTexture(new Rect(pt.x - 0.5f, pt.y - 0.5f, 3f, 3f), Texture2D.whiteTexture);
-                        GUI.color = gold;
-                        GUI.DrawTexture(new Rect(pt.x - 1.5f, pt.y - 1.5f, 3f, 3f), Texture2D.whiteTexture);
-                    }
+                corners[i] += (center - corners[i]).normalized * 1.5f; // slightly inset
+                perimeter += lens[i] = (corners[(i + 1) % 4] - corners[i]).magnitude;
             }
+            if (!(perimeter > 0f && perimeter < 2000f)) return; // NaN or absurd rect: draw nothing
+
+            const int tail = 10;
+            const float step = 2f, speed = 40f; // px between tail dots, px per second
+            for (int spark = 0; spark < 2; spark++)
+                for (int j = 0; j < tail; j++)
+                {
+                    float d = ((Time.unscaledTime * speed + spark * perimeter / 2f - j * step) % perimeter + perimeter) % perimeter;
+                    int edge = 0;
+                    while (edge < 3 && d > lens[edge]) d -= lens[edge++];
+                    var pt = Vector3.Lerp(corners[edge], corners[(edge + 1) % 4], lens[edge] > 0f ? d / lens[edge] : 0f);
+                    float fade = 1f - (float)j / tail;
+                    GUI.color = new Color(1f, 0.82f, 0.45f, 0.9f * fade * fade);
+                    float size = j == 0 ? 3f : 2f;
+                    GUI.DrawTexture(new Rect(pt.x - size / 2f, pt.y - size / 2f, size, size), Texture2D.whiteTexture);
+                }
             GUI.color = Color.white;
         }
 
