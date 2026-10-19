@@ -57,6 +57,7 @@ namespace Autoshield
             {
                 Vector3 a = corners[i], b = corners[(i + 1) % 4];
                 float len = (b - a).magnitude;
+                if (!(len > 0f && len < 500f)) return; // NaN/huge rect would make the loop run (almost) forever
                 for (float d = 0; d < len; d += 2f, pos += 2f)
                     if ((pos + offset) % 10f < 6f)
                     {
