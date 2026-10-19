@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ValheimDir Condition="'$(ValheimDir)'==''">S:\Steam\steamapps\common\Valheim</ValheimDir>
+    <Managed>$(ValheimDir)\valheim_Data\Managed</Managed>
+    <AssemblyName>Autoshield</AssemblyName>
+    <NoWarn>MSB3277</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="$(ValheimDir)\BepInEx\core\BepInEx.dll" Private="false" />
+    <Reference Include="$(ValheimDir)\BepInEx\core\0Harmony.dll" Private="false" />
+    <Reference Include="$(Managed)\assembly_valheim.dll;$(Managed)\assembly_utils.dll;$(Managed)\assembly_guiutils.dll" Private="false" />
+    <Reference Include="$(Managed)\UnityEngine.dll;$(Managed)\UnityEngine.CoreModule.dll;$(Managed)\UnityEngine.InputLegacyModule.dll;$(Managed)\UnityEngine.UIModule.dll;$(Managed)\UnityEngine.IMGUIModule.dll" Private="false" />
+  </ItemGroup>
+  <Target Name="Deploy" AfterTargets="Build">
+    <Copy SourceFiles="$(OutputPath)Autoshield.dll" DestinationFolder="$(ValheimDir)\BepInEx\plugins\Autoshield" />
+  </Target>
+</Project>
