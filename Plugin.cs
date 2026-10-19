@@ -12,6 +12,8 @@ namespace Autoshield
         const string Key = "KampfBallerina.autoshield";
 
         static ConfigEntry<KeyCode> markKey;
+        static ConfigEntry<bool> stowWithWeapon;
+        static int equipDepth; // >0 while Humanoid.EquipItem runs, so weapon swaps are not mistaken for unequipping
         static Plugin instance;
         static readonly HashSet<string> disabled = new HashSet<string>();
         static readonly System.Reflection.FieldInfo elementsField = AccessTools.Field(typeof(InventoryGrid), "m_elements");
@@ -34,6 +36,8 @@ namespace Autoshield
             instance = this;
             markKey = Config.Bind("General", "MarkKey", KeyCode.Mouse2,
                 "Key or mouse button (e.g. Mouse2, Mouse3, F, LeftAlt) to hover over a shield in the inventory and mark it. None = middle mouse button.");
+            stowWithWeapon = Config.Bind("General", "StowShieldWithWeapon", true,
+                "Also put the marked shield away when the one-handed weapon is put away.");
             var h = new Harmony("KampfBallerina.autoshield");
             foreach (var t in typeof(Plugin).GetNestedTypes(System.Reflection.BindingFlags.NonPublic))
             {
@@ -135,6 +139,9 @@ namespace Autoshield
         [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.EquipItem))]
         static class OnEquip
         {
+            static void Prefix() => equipDepth++;
+            static void Finalizer() => equipDepth--;
+
             static void Postfix(Humanoid __instance, ItemDrop.ItemData item, bool __result) => Safe("equip", () =>
             {
                 if (item == null || !__result || __instance != Player.m_localPlayer) return;
@@ -157,6 +164,20 @@ namespace Autoshield
                         if (p.IsItemEquiped(shield)) p.UnequipItem(shield);
                         break;
                 }
+            });
+        }
+
+        // Weapon put away (not swapped): stow the marked shield too.
+        [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.UnequipItem))]
+        static class OnUnequip
+        {
+            static void Postfix(Humanoid __instance, ItemDrop.ItemData item) => Safe("unequip", () =>
+            {
+                if (!stowWithWeapon.Value || equipDepth > 0 || item == null || __instance != Player.m_localPlayer) return;
+                if (item.m_shared.m_itemType != ItemDrop.ItemData.ItemType.OneHandedWeapon) return;
+                var p = (Player)__instance;
+                var shield = FindMarked(p);
+                if (shield != null && p.IsItemEquiped(shield)) p.UnequipItem(shield);
             });
         }
 
