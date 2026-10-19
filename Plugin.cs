@@ -20,7 +20,8 @@ namespace Autoshield
         static readonly System.Reflection.FieldInfo elementsField = AccessTools.Field(typeof(InventoryGrid), "m_elements");
         static readonly System.Reflection.FieldInfo hotbarElementsField = AccessTools.Field(typeof(HotkeyBar), "m_elements");
         static readonly System.Reflection.FieldInfo hotbarGoField = AccessTools.Field(AccessTools.Inner(typeof(HotkeyBar), "ElementData"), "m_go");
-        static HotkeyBar hotbar;
+        static readonly System.Reflection.FieldInfo hotbarItemsField = AccessTools.Field(typeof(HotkeyBar), "m_items");
+        static readonly List<HotkeyBar> hotbars = new List<HotkeyBar>();
         static readonly System.Reflection.FieldInfo widthField = AccessTools.Field(typeof(InventoryGrid), "m_width");
 
         // Runs a feature; on the first exception it logs once and switches that feature off for the session.
@@ -76,11 +77,18 @@ namespace Autoshield
                     DrawSparks(elements[idx].GetElementRectTransform());
             }
 
-            // Hotbar = first inventory row; element index equals the grid column.
-            if (marked.m_gridPos.y == 0 && hotbar != null && hotbar.gameObject.activeInHierarchy
-                && hotbarElementsField.GetValue(hotbar) is System.Collections.IList slots
-                && marked.m_gridPos.x >= 0 && marked.m_gridPos.x < slots.Count && slots[marked.m_gridPos.x] != null)
-                DrawSparks(hotbarGoField.GetValue(slots[marked.m_gridPos.x]) is GameObject go ? go.transform as RectTransform : null);
+            // Every hotbar that currently lists the marked shield (vanilla bar, quick-slot bars of other mods).
+            // Element index equals the item's grid column, see HotkeyBar.UpdateIcons.
+            hotbars.RemoveAll(bar => bar == null);
+            foreach (var bar in hotbars)
+            {
+                if (!bar.gameObject.activeInHierarchy) continue;
+                var items = hotbarItemsField.GetValue(bar) as List<ItemDrop.ItemData>;
+                if (items == null || !items.Contains(marked)) continue;
+                if (hotbarElementsField.GetValue(bar) is System.Collections.IList slots
+                    && marked.m_gridPos.x >= 0 && marked.m_gridPos.x < slots.Count && slots[marked.m_gridPos.x] != null)
+                    DrawSparks(hotbarGoField.GetValue(slots[marked.m_gridPos.x]) is GameObject go ? go.transform as RectTransform : null);
+            }
         }
 
         // Two slim gold sparks with long fading tails circle the slot, opposite each other.
@@ -204,11 +212,11 @@ namespace Autoshield
             });
         }
 
-        // Remember the hotbar so the border can be drawn on it too.
+        // Remember every hotbar so the border can be drawn on it too.
         [HarmonyPatch(typeof(HotkeyBar), "UpdateIcons")]
         static class HotbarSeen
         {
-            static void Postfix(HotkeyBar __instance) => hotbar = __instance;
+            static void Postfix(HotkeyBar __instance) { if (!hotbars.Contains(__instance)) hotbars.Add(__instance); }
         }
 
         // A dropped shield must not carry the mark into the world.
