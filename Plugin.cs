@@ -78,7 +78,7 @@ namespace Autoshield
                 corners[i] = new Vector3(sp.x, Screen.height - sp.y);
             }
 
-            // Two slim gold sparks with a fading tail circle the slot, opposite each other.
+            // Two slim gold sparks with long fading tails circle the slot, opposite each other.
             var center = (corners[0] + corners[2]) / 2f;
             var lens = new float[4];
             float perimeter = 0f;
@@ -89,8 +89,8 @@ namespace Autoshield
             }
             if (!(perimeter > 0f && perimeter < 2000f)) return; // NaN or absurd rect: draw nothing
 
-            const int tail = 10;
-            const float step = 2f, speed = 40f; // px between tail dots, px per second
+            const int tail = 40;
+            const float step = 2f, speed = 50f; // px between tail dots, px per second
             for (int spark = 0; spark < 2; spark++)
                 for (int j = 0; j < tail; j++)
                 {
