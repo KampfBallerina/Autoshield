@@ -12,9 +12,26 @@ namespace Autoshield
         const string Key = "KampfBallerina.autoshield";
 
         static ConfigEntry<KeyCode> markKey;
+        static Plugin instance;
+        static readonly HashSet<string> disabled = new HashSet<string>();
+        static readonly System.Reflection.FieldInfo elementsField = AccessTools.Field(typeof(InventoryGrid), "m_elements");
+        static readonly System.Reflection.FieldInfo widthField = AccessTools.Field(typeof(InventoryGrid), "m_width");
+
+        // Runs a feature; on the first exception it logs once and switches that feature off for the session.
+        static void Safe(string feature, System.Action action)
+        {
+            if (disabled.Contains(feature)) return;
+            try { action(); }
+            catch (System.Exception e)
+            {
+                disabled.Add(feature);
+                instance.Logger.LogError("Autoshield feature '" + feature + "' disabled after error: " + e);
+            }
+        }
 
         void Awake()
         {
+            instance = this;
             markKey = Config.Bind("General", "MarkKey", KeyCode.Mouse2,
                 "Key or mouse button (e.g. Mouse2, Mouse3, F, LeftAlt) to hover over a shield in the inventory and mark it. None = middle mouse button.");
             var h = new Harmony("KampfBallerina.autoshield");
@@ -29,19 +46,28 @@ namespace Autoshield
         // Marching-ants border around the marked shield's inventory slot.
         void OnGUI()
         {
+            if (Event.current.type != EventType.Repaint) return;
+            Safe("border", DrawBorder);
+        }
+
+        static void DrawBorder()
+        {
             var p = Player.m_localPlayer;
-            if (p == null || !InventoryGui.IsVisible()) return;
+            if (p == null || InventoryGui.instance == null || !InventoryGui.IsVisible()) return;
             var marked = FindMarked(p);
             if (marked == null) return;
             var grid = InventoryGui.instance.m_playerGrid;
-            var elements = Traverse.Create(grid).Field("m_elements").GetValue<List<InventoryElement>>();
-            int idx = marked.m_gridPos.y * Traverse.Create(grid).Field("m_width").GetValue<int>() + marked.m_gridPos.x;
-            if (elements == null || idx < 0 || idx >= elements.Count) return;
+            var elements = elementsField.GetValue(grid) as List<InventoryElement>;
+            int idx = marked.m_gridPos.y * (int)widthField.GetValue(grid) + marked.m_gridPos.x;
+            if (elements == null || idx < 0 || idx >= elements.Count || elements[idx] == null) return;
 
             var rt = elements[idx].GetElementRectTransform();
+            var canvas = rt != null ? rt.GetComponentInParent<Canvas>() : null;
+            if (canvas == null || !rt.gameObject.activeInHierarchy) return;
+            var cam = canvas.rootCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.rootCanvas.worldCamera;
+
             var corners = new Vector3[4]; // bottom-left, top-left, top-right, bottom-right
             rt.GetWorldCorners(corners);
-            var cam = rt.GetComponentInParent<Canvas>().rootCanvas.worldCamera;
             for (int i = 0; i < 4; i++)
             {
                 var sp = RectTransformUtility.WorldToScreenPoint(cam, corners[i]);
@@ -57,17 +83,19 @@ namespace Autoshield
             {
                 Vector3 a = corners[i], b = corners[(i + 1) % 4];
                 float len = (b - a).magnitude;
-                if (!(len > 0f && len < 500f)) return; // NaN/huge rect would make the loop run (almost) forever
-                for (float d = 0; d < len; d += 2f, pos += 2f)
+                if (!(len > 0f && len < 500f)) return; // NaN or absurd rect: draw nothing
+                int steps = Mathf.Min((int)(len / 2f), 250); // hard cap, the loop can never run away
+                for (int s = 0; s < steps; s++, pos += 2f)
                     if ((pos + offset) % 10f < 6f)
                     {
-                        var pt = Vector3.Lerp(a, b, d / len);
+                        var pt = Vector3.Lerp(a, b, s * 2f / len);
                         GUI.color = new Color(0f, 0f, 0f, 0.8f);
                         GUI.DrawTexture(new Rect(pt.x - 0.5f, pt.y - 0.5f, 3f, 3f), Texture2D.whiteTexture);
                         GUI.color = gold;
                         GUI.DrawTexture(new Rect(pt.x - 1.5f, pt.y - 1.5f, 3f, 3f), Texture2D.whiteTexture);
                     }
             }
+            GUI.color = Color.white;
         }
 
         static bool IsMarked(ItemDrop.ItemData i) => i.m_customData.ContainsKey(Key);
@@ -89,30 +117,27 @@ namespace Autoshield
         [HarmonyPatch(typeof(InventoryGui), "Update")]
         static class MiddleClick
         {
-            static void Postfix(InventoryGui __instance)
+            static void Postfix(InventoryGui __instance) => Safe("mark", () =>
             {
                 var p = Player.m_localPlayer;
-                if (p == null || !Input.GetKeyDown(markKey.Value == KeyCode.None ? KeyCode.Mouse2 : markKey.Value) || !__instance.m_playerGrid.gameObject.activeInHierarchy) return;
+                if (p == null || __instance.m_playerGrid == null || !Input.GetKeyDown(markKey.Value == KeyCode.None ? KeyCode.Mouse2 : markKey.Value) || !__instance.m_playerGrid.gameObject.activeInHierarchy) return;
                 var m = Input.mousePosition;
                 var item = __instance.m_playerGrid.GetItem(new Vector2i((int)m.x, (int)m.y));
                 if (item == null || item.m_shared.m_itemType != ItemDrop.ItemData.ItemType.Shield) return;
                 bool wasMarked = IsMarked(item);
                 SetMark(p, wasMarked ? null : item);
-                if (!wasMarked)
-                {
-                    if (p.RightItem != null && p.RightItem.m_shared.m_itemType == ItemDrop.ItemData.ItemType.OneHandedWeapon)
-                        p.EquipItem(item);
-                }
-            }
+                if (!wasMarked && p.RightItem != null && p.RightItem.m_shared.m_itemType == ItemDrop.ItemData.ItemType.OneHandedWeapon)
+                    p.EquipItem(item);
+            });
         }
 
         // Weapon change: equip the marked shield for one-handed weapons, stow it otherwise.
         [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.EquipItem))]
         static class OnEquip
         {
-            static void Postfix(Humanoid __instance, ItemDrop.ItemData item, bool __result)
+            static void Postfix(Humanoid __instance, ItemDrop.ItemData item, bool __result) => Safe("equip", () =>
             {
-                if (!__result || __instance != Player.m_localPlayer) return;
+                if (item == null || !__result || __instance != Player.m_localPlayer) return;
                 var p = (Player)__instance;
                 var shield = FindMarked(p);
                 if (shield == null) return;
@@ -132,7 +157,7 @@ namespace Autoshield
                         if (p.IsItemEquiped(shield)) p.UnequipItem(shield);
                         break;
                 }
-            }
+            });
         }
 
         [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), new[] { typeof(int) })]
