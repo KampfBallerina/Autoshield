@@ -200,7 +200,8 @@ namespace Autoshield
         {
             static void Postfix(ItemDrop.ItemData __instance, ref string __result)
             {
-                if (IsMarked(__instance)) __result += "\n<color=orange>[Auto Shield]</color>";
+                try { if (showTooltip.Value && __instance.m_customData != null && IsMarked(__instance)) __result += "\n<color=orange>[Auto Shield]</color>"; }
+                catch (System.Exception) { } // a tooltip must never throw
             }
         }
     }
