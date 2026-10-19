@@ -100,7 +100,7 @@ namespace Autoshield
                     var pt = Vector3.Lerp(corners[edge], corners[(edge + 1) % 4], lens[edge] > 0f ? d / lens[edge] : 0f);
                     float fade = 1f - (float)j / tail;
                     GUI.color = new Color(1f, 0.82f, 0.45f, 0.9f * fade * fade);
-                    float size = j == 0 ? 3f : 2f;
+                    const float size = 2f;
                     GUI.DrawTexture(new Rect(pt.x - size / 2f, pt.y - size / 2f, size, size), Texture2D.whiteTexture);
                 }
             GUI.color = Color.white;
