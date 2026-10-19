@@ -1,3 +1,5 @@
+<img width="1254" height="1254" alt="iconFullRes" src="https://github.com/user-attachments/assets/b86b2fca-634d-4bf6-873b-0cbd8ee2f8ec" />
+
 # Autoshield
 
 A client-side BepInEx mod for Valheim. Mark one shield and it is equipped automatically whenever you draw a compatible one-handed weapon, and put away again when you switch to something that can't be used with a shield.
