@@ -18,6 +18,9 @@ namespace Autoshield
         static Plugin instance;
         static readonly HashSet<string> disabled = new HashSet<string>();
         static readonly System.Reflection.FieldInfo elementsField = AccessTools.Field(typeof(InventoryGrid), "m_elements");
+        static readonly System.Reflection.FieldInfo hotbarElementsField = AccessTools.Field(typeof(HotkeyBar), "m_elements");
+        static readonly System.Reflection.FieldInfo hotbarGoField = AccessTools.Field(AccessTools.Inner(typeof(HotkeyBar), "ElementData"), "m_go");
+        static HotkeyBar hotbar;
         static readonly System.Reflection.FieldInfo widthField = AccessTools.Field(typeof(InventoryGrid), "m_width");
 
         // Runs a feature; on the first exception it logs once and switches that feature off for the session.
@@ -60,15 +63,29 @@ namespace Autoshield
         static void DrawBorder()
         {
             var p = Player.m_localPlayer;
-            if (p == null || InventoryGui.instance == null || !InventoryGui.IsVisible()) return;
+            if (p == null) return;
             var marked = FindMarked(p);
             if (marked == null) return;
-            var grid = InventoryGui.instance.m_playerGrid;
-            var elements = elementsField.GetValue(grid) as List<InventoryElement>;
-            int idx = marked.m_gridPos.y * (int)widthField.GetValue(grid) + marked.m_gridPos.x;
-            if (elements == null || idx < 0 || idx >= elements.Count || elements[idx] == null) return;
 
-            var rt = elements[idx].GetElementRectTransform();
+            if (InventoryGui.instance != null && InventoryGui.IsVisible())
+            {
+                var grid = InventoryGui.instance.m_playerGrid;
+                var elements = elementsField.GetValue(grid) as List<InventoryElement>;
+                int idx = marked.m_gridPos.y * (int)widthField.GetValue(grid) + marked.m_gridPos.x;
+                if (elements != null && idx >= 0 && idx < elements.Count && elements[idx] != null)
+                    DrawSparks(elements[idx].GetElementRectTransform());
+            }
+
+            // Hotbar = first inventory row; element index equals the grid column.
+            if (marked.m_gridPos.y == 0 && hotbar != null && hotbar.gameObject.activeInHierarchy
+                && hotbarElementsField.GetValue(hotbar) is System.Collections.IList slots
+                && marked.m_gridPos.x >= 0 && marked.m_gridPos.x < slots.Count && slots[marked.m_gridPos.x] != null)
+                DrawSparks(hotbarGoField.GetValue(slots[marked.m_gridPos.x]) is GameObject go ? go.transform as RectTransform : null);
+        }
+
+        // Two slim gold sparks with long fading tails circle the slot, opposite each other.
+        static void DrawSparks(RectTransform rt)
+        {
             var canvas = rt != null ? rt.GetComponentInParent<Canvas>() : null;
             if (canvas == null || !rt.gameObject.activeInHierarchy) return;
             var cam = canvas.rootCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.rootCanvas.worldCamera;
@@ -81,7 +98,6 @@ namespace Autoshield
                 corners[i] = new Vector3(sp.x, Screen.height - sp.y);
             }
 
-            // Two slim gold sparks with long fading tails circle the slot, opposite each other.
             var center = (corners[0] + corners[2]) / 2f;
             var lens = new float[4];
             float perimeter = 0f;
@@ -186,6 +202,13 @@ namespace Autoshield
                 var shield = FindMarked(p);
                 if (shield != null && p.IsItemEquiped(shield)) p.UnequipItem(shield);
             });
+        }
+
+        // Remember the hotbar so the border can be drawn on it too.
+        [HarmonyPatch(typeof(HotkeyBar), "UpdateIcons")]
+        static class HotbarSeen
+        {
+            static void Postfix(HotkeyBar __instance) => hotbar = __instance;
         }
 
         // A dropped shield must not carry the mark into the world.
