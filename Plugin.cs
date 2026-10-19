@@ -181,12 +181,19 @@ namespace Autoshield
             });
         }
 
+        // A dropped shield must not carry the mark into the world.
+        [HarmonyPatch(typeof(ItemDrop), nameof(ItemDrop.DropItem))]
+        static class OnDrop
+        {
+            static void Prefix(ItemDrop.ItemData item) => Safe("drop", () => item?.m_customData?.Remove(Key));
+        }
+
         [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), new[] { typeof(int) })]
         static class Tooltip
         {
             static void Postfix(ItemDrop.ItemData __instance, ref string __result)
             {
-                if (IsMarked(__instance)) __result += "\n<color=orange>[Auto-Schild]</color>";
+                if (IsMarked(__instance)) __result += "\n<color=orange>[Auto Shield]</color>";
             }
         }
     }
