@@ -13,6 +13,7 @@ namespace Autoshield
 
         static ConfigEntry<KeyCode> markKey;
         static ConfigEntry<bool> stowWithWeapon;
+        static ConfigEntry<bool> showTooltip;
         static int equipDepth; // >0 while Humanoid.EquipItem runs, so weapon swaps are not mistaken for unequipping
         static Plugin instance;
         static readonly HashSet<string> disabled = new HashSet<string>();
@@ -38,6 +39,8 @@ namespace Autoshield
                 "Key or mouse button (e.g. Mouse2, Mouse3, F, LeftAlt) to hover over a shield in the inventory and mark it. None = middle mouse button.");
             stowWithWeapon = Config.Bind("General", "StowShieldWithWeapon", true,
                 "Also put the marked shield away when the one-handed weapon is put away.");
+            showTooltip = Config.Bind("General", "ShowTooltipText", true,
+                "Add the [Auto Shield] line to the item description. If false, only the border marks the shield.");
             var h = new Harmony("KampfBallerina.autoshield");
             foreach (var t in typeof(Plugin).GetNestedTypes(System.Reflection.BindingFlags.NonPublic))
             {
